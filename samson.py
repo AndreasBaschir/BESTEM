@@ -3,14 +3,10 @@ from prophet import Prophet
 from scipy import stats
 import multiprocessing as mp
 from scipy.stats import norm
-from stockpyl.eoq import economic_order_quantity
 import pandas as pd
 import warnings
 warnings.filterwarnings("ignore")
 import matplotlib.pyplot as plt
-import plotly.express as px
-import plotly.graph_objects as go
-
 
 
 if __name__ == '__main__':
@@ -49,7 +45,7 @@ if __name__ == '__main__':
     count = 0
 
     # Initialize an empty dictionary to store the product IDs and their corresponding order quantities
-    order_quantities = {}
+    product_details = {}
 
     # Iterate over the unique product IDs
     for product_id in product_ids:
@@ -122,9 +118,11 @@ if __name__ == '__main__':
 
 
 
-        # print("MAPE: ", mape, "%")
-        # mape_median += mape
-        # count += 1
+        print("MAPE: ", mape, "%")
+        if mape > 0:
+            mape_median += mape
+            count += 1
+
         # print(temp)
         #
         # print(forecast)
@@ -143,11 +141,7 @@ if __name__ == '__main__':
         z = np.abs(np.percentile(forecasted_demand, 100 * (1 - service_level)))
         order_quantity = np.ceil(forecasted_demand.mean() + z).astype(int)
 
-        if mape > 0 and mape < 100:
-            # print(product_id)
-            # print("MAPE: ", mape, "%")
-            # Add the product ID and its order quantity to the dictionary
-            order_quantities[product_id] = order_quantity
+
 
         # Calculate the reorder point
         reorder_point = round(forecasted_demand.mean() * lead_time + z, 0)
@@ -162,29 +156,64 @@ if __name__ == '__main__':
         # Calculate the total cost
         total_cost = total_holding_cost
 
+        if mape > 0 and mape < 100:
+            # print(product_id)
+            # print("MAPE: ", mape, "%")
+            # Add the product ID and its order quantity to the dictionary
+            product_details[product_id] = {
+                'Order_Quantity': order_quantity,
+                'Reorder_Point': reorder_point,
+                'Safety_Stock': safety_stock,
+                'Total_Cost': total_cost
+            }
+
         # print("Optimal Order Quantity:", order_quantity)
         # print("Reorder Point:", reorder_point)
         # print("Safety Stock:", safety_stock)
         # print("Total Cost:", total_cost)
 
-    # if (count != 0):
-    #     print("MAPE median: ", mape_median / count, "%")
+
+    if (count != 0):
+        print("MAPE median: ", mape_median / count, "%")
     # Print the list of product IDs with a MAPE under 100%
-    # print(low_mape_product_ids)
+
 
     # Convert the dictionary to a DataFrame
-    low_mape_product_ids_df = pd.DataFrame(list(order_quantities.items()), columns=['Product_ID', 'Order_Quantity'])
-    low_mape_product_ids_df = low_mape_product_ids_df.sort_values(by=['Order_Quantity'], ascending=False)
-    low_mape_product_ids_df = low_mape_product_ids_df.head(10)
-    low_mape_product_ids_df.to_csv('order_quantities.csv', index=False)
+    product_details_df = pd.DataFrame.from_dict(product_details, orient='index')
+    product_details_df = product_details_df.sort_values(by=['Order_Quantity'], ascending=False)
+    product_details_df = product_details_df.head(10)
+    # print(product_details_df)
 
-    plt.figure(figsize=(10, 6))
-    plt.bar(low_mape_product_ids_df['Product_ID'], low_mape_product_ids_df['Order_Quantity'])
-    plt.xlabel('Product ID')
-    plt.ylabel('Order Quantity')
-    plt.title('Recommended Restock for each Product ID')
-    plt.tight_layout()
-    plt.savefig('toprecommendations.png')
+# Try to import OpenAI's GPT-3 for generating recommendations
+import openai
+openai.api_key = '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'
+
+    # Function to generate a resupply recommendation message using OpenAI's API
+def generate_resupply_message(product_id, order_quantity, reorder_point, safety_stock):
+    response = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo",
+        messages=[
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": f"Generate a resupply recommendation message for the Stock Manager of Product ID {product_id}, advising them to order {order_quantity} units of the product, as the stock has reached the reorder point of {reorder_point} units. Additionally, suggest purchasing an extra {safety_stock} units as safety stock to prevent any gaps in supply."}
+        ]
+    )
+    # Extract the message from the response
+    message = response.choices[0].message['content']
+    return message
+
+for index, row in product_details_df.iterrows():
+    product_id = index
+    order_quantity = row['Order_Quantity']
+    reorder_point = row['Reorder_Point']
+    safety_stock = row['Safety_Stock']
+    total_cost = row['Total_Cost']
+    # Now you can use these variables in your code
+    # print(f"Product ID: {product_id}, Order Quantity: {order_quantity}, Reorder Point: {reorder_point}, Safety Stock: {safety_stock}, Total Cost: {total_cost}")
+    resupply_message = generate_resupply_message(product_id, order_quantity, reorder_point, safety_stock)
+    print(ResourceWarning)
+    with open('restock_info.txt','w') as output_file:
+        output_file.write(resupply_message)
+
 
 
 
