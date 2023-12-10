@@ -2,7 +2,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 #Load data
-data = pd.read_csv('./assets/Stocks.csv', low_memory=False)
+data = pd.read_csv('./Stocks.csv', low_memory=False)
 
 #Convert the 'Date' column to datetime format
 data['Date'] = pd.to_datetime(data['Date'])
